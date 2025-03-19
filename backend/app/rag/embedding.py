@@ -1,110 +1,153 @@
-# app/rag/embedding.py
-from typing import List, Dict, Any
-import numpy as np
 import torch
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-from pymilvus import Collection, DataType, FieldSchema, CollectionSchema, utility
-from app.core.config import settings
-from app.db.vector_store import connect_to_milvus, check_collection_exists
+from transformers import AutoTokenizer, AutoModel
+import numpy as np
+from tqdm import tqdm
+from vector_store import VectorStore
+from core.config import settings
+from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
+class BGEEmbedding:
+    """BGE嵌入模型封装"""
+    
+    def __init__(self, model_name="BAAI/bge-large-zh-v1.5"):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
+        
+    def encode(self, texts, batch_size=32, normalize=True):
+        """将文本编码为向量"""
+        embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i+batch_size]
+            
+            # 编码
+            encoded_input = self.tokenizer(
+                batch_texts, 
+                padding=True, 
+                truncation=True, 
+                max_length=512, 
+                return_tensors='pt'
+            ).to(self.device)
+            
+            # 计算嵌入
+            with torch.no_grad():
+                model_output = self.model(**encoded_input)
+                batch_embeddings = model_output.last_hidden_state[:, 0]
+                
+                # 归一化
+                if normalize:
+                    batch_embeddings = torch.nn.functional.normalize(batch_embeddings, p=2, dim=1)
+                
+                embeddings.append(batch_embeddings.cpu().numpy())
+        
+        return np.vstack(embeddings)
 
+def setup_milvus_collection():
+    """设置Milvus集合"""
+    # 连接到Milvus服务
+    collection_name = settings.MILVUS_COLLECTION
+    vector_db = VectorStore()
+    vector_db.connect_to_milvus()
+    
+    # 定义字段
+    fields = [
+        FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=36),
+        FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=4096),
+        FieldSchema(name="document_name", dtype=DataType.VARCHAR, max_length=256),
+        FieldSchema(name="chapter", dtype=DataType.VARCHAR, max_length=256),
+        FieldSchema(name="section", dtype=DataType.VARCHAR, max_length=256),
+        FieldSchema(name="effective_date", dtype=DataType.VARCHAR, max_length=20),
+        FieldSchema(name="is_effective", dtype=DataType.BOOL),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=dim)
+    ]
+    
+    vector_db.create_collection(fields,collection_name,description="法律文档分块集合")
+    
+    print(f"已成功创建集合 {collection_name} 并设置索引")
+    return collection
 
-class EmbeddingManager:
-    """负责文本向量化和向量存储管理"""
+# 使用示例
+if __name__ == "__main__":
+    collection = setup_milvus_collection(collection_name="legal_chunks", dim=768)
+def load_chunks_to_milvus(chunks_file, collection_name="legal_chunks"):
+    """将分块加载到Milvus"""
+    # 加载分块
+    with open(chunks_file, 'r', encoding='utf-8') as f:
+        chunks = json.load(f)
+    
+    # 初始化BGE嵌入模型
+    embedder = BGEEmbedding()
+    
+    # 连接到Milvus
+    connections.connect("default", host="localhost", port="19530")
+    collection = Collection(collection_name)
+    collection.load()
+    
+    # 准备数据
+    ids = []
+    contents = []
+    document_names = []
+    chapters = []
+    sections = []
+    effective_dates = []
+    is_effectives = []
+    texts_to_embed = []
+    
+    for chunk in chunks:
+        ids.append(chunk['uuid'])
+        contents.append(chunk['content'])
+        
+        # 提取元数据
+        metadata = chunk['metadata']
+        document_names.append(metadata.get('document_name', ''))
+        chapters.append(metadata.get('chapter', ''))
+        sections.append(metadata.get('section', ''))
+        effective_dates.append(metadata.get('effective_date', ''))
+        is_effectives.append(metadata.get('is_effective', True))
+        
+        # 准备文本进行嵌入
+        texts_to_embed.append(chunk['content'])
+    
+    # 生成嵌入
+    print("生成文本嵌入...")
+    embeddings = embedder.encode(texts_to_embed)
+    
+    # 插入数据
+    print("将数据插入Milvus...")
+    entities = [
+        ids,
+        contents,
+        document_names,
+        chapters,
+        sections,
+        effective_dates,
+        is_effectives,
+        embeddings
+    ]
+    
+    # 分批插入以避免内存问题
+    batch_size = 1000
+    for i in tqdm(range(0, len(ids), batch_size)):
+        end = min(i + batch_size, len(ids))
+        batch_entities = [entity[i:end] for entity in entities]
+        collection.insert(batch_entities)
+    
+    # 刷新集合以确保数据可见
+    collection.flush()
+    
+    print(f"成功将 {len(ids)} 个分块插入到 Milvus 集合 {collection_name}")
+    
+    # 显示集合统计信息
+    print(f"集合统计: {collection.num_entities} 个实体")
+    
+    return collection
 
-    def __init__(self):
-        # 使用BGE中文模型作为嵌入模型
-        self.embedding_model = HuggingFaceEmbeddings(
-            model_name="BAAI/bge-large-zh",
-            model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
-            encode_kwargs={"normalize_embeddings": True}
-        )
-
-        # 向量维度
-        self.embedding_dim = settings.EMBEDDING_DIMENSION
-
-        # 连接到Milvus
-        connect_to_milvus()
-
-        # 确保集合存在
-        self._ensure_collection_exists()
-
-    def _ensure_collection_exists(self):
-        """确保Milvus中存在所需的集合"""
-        collection_name = settings.MILVUS_COLLECTION
-
-        if not check_collection_exists(collection_name):
-            # 定义集合字段
-            fields = [
-                FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=100, is_primary=True),
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=4000),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=self.embedding_dim),
-                FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=200),
-                FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=200),
-                FieldSchema(name="article_number", dtype=DataType.VARCHAR, max_length=50),
-                FieldSchema(name="law_type", dtype=DataType.VARCHAR, max_length=50),
-            ]
-
-            # 创建集合架构
-            schema = CollectionSchema(fields=fields, description="法律文档集合")
-
-            # 创建集合
-            collection = Collection(name=collection_name, schema=schema)
-
-            # 创建索引
-            index_params = {
-                "index_type": "HNSW",  # 快速最近邻搜索
-                "metric_type": "IP",  # 内积相似度
-                "params": {"M": 8, "efConstruction": 64}
-            }
-            collection.create_index(field_name="embedding", index_params=index_params)
-
-            print(f"创建了新的集合 '{collection_name}'")
-        else:
-            print(f"集合 '{collection_name}' 已存在")
-
-    def get_embedding(self, text: str) -> List[float]:
-        """获取文本的嵌入向量"""
-        return self.embedding_model.embed_query(text)
-
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """批量获取文本的嵌入向量"""
-        return self.embedding_model.embed_documents(texts)
-
-    def insert_documents(self, documents: List[Dict[str, Any]]) -> bool:
-        """将文档插入到向量数据库"""
-        if not documents:
-            return False
-
-        collection = Collection(name=settings.MILVUS_COLLECTION)
-        collection.load()
-
-        # 提取所有文本用于批量嵌入
-        texts = [doc["text"] for doc in documents]
-        embeddings = self.get_embeddings(texts)
-
-        # 准备要插入的数据
-        ids = [doc["id"] for doc in documents]
-        texts = [doc["text"] for doc in documents]
-        sources = [doc["metadata"].get("source", "") for doc in documents]
-        titles = [doc["metadata"].get("title", "") for doc in documents]
-        article_numbers = [doc["metadata"].get("article_number", "") for doc in documents]
-        law_types = [doc["metadata"].get("law_type", "") for doc in documents]
-
-        # 插入数据
-        try:
-            collection.insert([
-                ids,
-                texts,
-                embeddings,
-                sources,
-                titles,
-                article_numbers,
-                law_types
-            ])
-            collection.flush()
-            return True
-        except Exception as e:
-            print(f"插入文档时出错: {e}")
-            return False
-        finally:
-            collection.release()
+# 使用示例
+if __name__ == "__main__":
+    # 设置集合
+    setup_milvus_collection(collection_name="legal_chunks", dim=1024)  # BGE-large-zh 维度为1024
+    
+    # 加载数据
+    chunks_file = "backend/data/processed_chunks/all_chunks.json"
+    collection = load_chunks_to_milvus(chunks_file, collection_name="legal_chunks")

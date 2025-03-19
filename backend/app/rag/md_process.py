@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup, Tag
 from typing import List, Dict, Any, Tuple, Optional
 import os
 from datetime import datetime
+import uuid
 
 '''
 法规文件处理预期：
@@ -177,6 +178,9 @@ class LegalDocumentProcessor:
         # 保存最后一个chunk
         if current_chunk:
             chunks.append(current_chunk)
+
+        for chunk in chunks:
+            chunk['uuid'] = str(uuid.uuid4())
 
         return chunks
 
