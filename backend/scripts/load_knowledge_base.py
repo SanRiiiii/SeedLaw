@@ -1,49 +1,47 @@
 # scripts/load_knowledge_base.py
 import os
-import argparse
 import logging
+import json
 from dotenv import load_dotenv
 import sys
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.rag.document_processor import LegalDocumentProcessor
-from app.rag.embedding import EmbeddingManager
-from app.core.config import settings
-from app.db.vector_store import connect_to_milvus
+# from app.rag.document_processor import LegalDocumentProcessor
+from app.rag.md_process import LegalDocumentProcessor
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("knowledge_base_loading.log"),
+        logging.StreamHandler()  # 同时保留控制台输出
+    ]
 )
 logger = logging.getLogger(__name__)
 
 
-def load_documents(docs_dir: str, file_filter: str = None):
+def process_documents(docs_dir: str, output_dir: str, file_filter: str = None):
     """
-    加载目录中的所有法律文档，处理并索引到向量数据库
+    加载目录中的法律文档，处理并将拆分后的chunks保存为JSON文件
 
     Args:
         docs_dir: 法律文档目录路径
-        file_filter: 可选的文件名过滤器，例如 ".pdf" 或 "公司法"
+        output_dir: 输出目录路径，用于保存拆分后的JSON文件
+        file_filter: 可选的文件名过滤器，例如 ".md" 或 "公司法"
     """
     # 加载环境变量
     load_dotenv()
 
     logger.info(f"开始处理目录: {docs_dir}")
+    
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
 
     # 初始化文档处理器
-    processor = LegalDocumentProcessor(chunk_size=800, chunk_overlap=100)
-
-    # 初始化向量管理器
-    embedding_manager = EmbeddingManager()
-
-    # 确保Milvus连接
-    if not connect_to_milvus():
-        logger.error("无法连接到Milvus向量数据库，请检查配置")
-        return
+    processor = LegalDocumentProcessor()
 
     # 遍历目录
     total_files = 0
@@ -63,21 +61,25 @@ def load_documents(docs_dir: str, file_filter: str = None):
 
             try:
                 # 处理文档
-                chunks = processor.load_single_document(file_path)
+                if file_name.endswith('.md'):
+                    # 使用md_process处理markdown文件
+                    chunks = processor.process_legal_markdown(file_path)
+                # else:
+                #     # 使用普通处理器处理其他文件
+                #     chunks = processor.load_single_document(file_path)
 
                 if not chunks:
                     logger.warning(f"文件 {file_name} 未生成任何文本块")
                     continue
 
-                # 将文档添加到向量数据库
-                success = embedding_manager.insert_documents(chunks)
+                # 保存chunks到JSON文件
+                output_file = os.path.join(output_dir, f"{os.path.splitext(file_name)[0]}_chunks.json")
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(chunks, f, ensure_ascii=False, indent=2)
 
-                if success:
-                    logger.info(f"成功处理文件: {file_name}，生成 {len(chunks)} 个文本块")
-                    processed_files += 1
-                    total_chunks += len(chunks)
-                else:
-                    logger.error(f"向量存储失败: {file_name}")
+                logger.info(f"成功处理文件: {file_name}，生成 {len(chunks)} 个文本块，保存至 {output_file}")
+                processed_files += 1
+                total_chunks += len(chunks)
 
             except Exception as e:
                 logger.error(f"处理文件 {file_name} 时出错: {str(e)}")
@@ -85,21 +87,10 @@ def load_documents(docs_dir: str, file_filter: str = None):
     logger.info(f"处理完成! 总共处理了 {processed_files}/{total_files} 个文件，生成了 {total_chunks} 个文本块")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="加载法律文档到知识库")
-    parser.add_argument(
-        "--dir", type=str, required=True,
-        help="法律文档目录的路径"
-    )
-    parser.add_argument(
-        "--filter", type=str, default=None,
-        help="可选的文件名过滤器"
-    )
-
-    args = parser.parse_args()
-
-    load_documents(args.dir, args.filter)
-
 
 if __name__ == "__main__":
-    main()
+
+    docs_dir = "../data/laws/business_laws"  # 法律文档目录路径
+    output_dir = "../data/chunks"  # 输出目录路径
+    file_filter = "公司法"  # 文件名过滤器
+    process_documents(docs_dir, output_dir, file_filter)

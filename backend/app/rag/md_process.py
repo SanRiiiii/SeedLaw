@@ -51,8 +51,14 @@ class LegalDocumentProcessor:
             file_metadata = self._extract_metadata_from_filename(file_path)
             
             # 检查法律是否生效
-            is_effective = self._check_law_effectiveness(md_content)
-            file_metadata["is_effective"] = is_effective
+            effectiveness_info = self._check_law_effectiveness(md_content)
+
+            # 将字典中的值添加到file_metadata
+            file_metadata["is_effective"] = effectiveness_info["is_effective"]
+            file_metadata["effective_date"] = effectiveness_info["effective_date"]
+            # 如果effective_date是datetime对象，转换为字符串
+            if isinstance(file_metadata["effective_date"], datetime):
+                file_metadata["effective_date"] = file_metadata["effective_date"].strftime('%Y-%m-%d')
 
             # 转换为 HTML
             html = markdown.markdown(md_content, extensions=['tables', 'fenced_code'])
@@ -71,24 +77,15 @@ class LegalDocumentProcessor:
         """从文件名提取基本元数据"""
         filename = os.path.basename(file_path)
         name, _ = os.path.splitext(filename)
+        law_name = name
         
-        # 提取法律名称和日期
-        # 例如从 "公司法(2023-12-29).md" 提取 "公司法" 和 "2023-12-29"
-        match = re.match(r"(.+)\((\d{4}-\d{2}-\d{2})\)", name)
-        if match:
-            law_name = match.group(1)
-            effective_date = match.group(2)
-        else:
-            law_name = name
-            effective_date = None
 
         # 返回基本信息
         return {
-            "document_name": law_name,
-            "effective_date": effective_date
+            "document_name": law_name
         }
 
-    def _check_law_effectiveness(self, content: str) -> bool:
+    def _check_law_effectiveness(self, content: str) -> Dict[str, Any]:
         """
         检查法律是否生效
         通过检查文档末尾的附则来判断法律是否生效
@@ -96,6 +93,22 @@ class LegalDocumentProcessor:
         # 获取最后2000个字符进行检查
         end_content = content[-2000:]
         
+        # 检查生效日期
+        effective_date_match = re.search(r"本(?:法|条例|规定|细则|办法|规则|通知|决定)自(\d{4}年\d{1,2}月\d{1,2}日)起(?:施行|生效|实施)", end_content)
+
+        if effective_date_match:
+            # 提取日期
+            date_str = effective_date_match.group(1)
+            date_str = re.sub(r'[年月]', '-', date_str).replace('日', '')
+            effective_date = datetime.strptime(date_str, '%Y-%m-%d')
+            print(effective_date)
+            # 如果生效日期在未来，则标记为未生效
+            if effective_date > datetime.now():
+                return {
+                    "is_effective": False,
+                    "effective_date": effective_date
+                }
+            
         # 检查是否有废止或失效的明确标记
         ineffective_patterns = [
             r"本法(已)?废止",
@@ -105,24 +118,16 @@ class LegalDocumentProcessor:
         
         for pattern in ineffective_patterns:
             if re.search(pattern, end_content):
-                return False
-        
-        # 检查生效日期
-        effective_date_match = re.search(r"本(?:法|条例|规定|细则|办法|规则|通知|决定)自(\d{4}年\d{1,2}月\d{1,2}日)起(?:施行|生效|实施)", end_content)
-        if effective_date_match:
+                return {
+                    "is_effective": False,
+                    "effective_date": effective_date
+                }   
             
-            # 提取日期
-            date_str = effective_date_match.group(1)
-            date_str = re.sub(r'[年月]', '-', date_str).replace('日', '')
-            effective_date = datetime.strptime(date_str, '%Y-%m-%d')
-            
-            # 如果生效日期在未来，则标记为未生效
-            if effective_date > datetime.now():
-                return False
-        
-        return True
-    
-    
+        return {
+            "is_effective": True,
+            "effective_date": effective_date
+        }
+               
 
     def _process_legal_html(self,
                             soup: BeautifulSoup,
@@ -272,41 +277,27 @@ class LegalDocumentProcessor:
         return chunks
 
 
-'''
-process_legal_markdown
-  ├── _extract_metadata_from_filename
-  ├── markdown.markdown (将 Markdown 转换为 HTML)
-  ├── BeautifulSoup (解析 HTML)
-  └── _process_legal_html
-      └── _process_legal_element
-          ├── _build_heading_path (如果是标题)
-          ├── _split_legal_text (如果是段落或文本块)
-          └── _process_legal_list (如果是列表)
-              └── _split_legal_text (处理列表项)
+# # 使用示例
+# if __name__ == "__main__":
+#     processor = LegalDocumentProcessor(max_chunk_size=1500)
+#     chunks = processor.process_legal_markdown("/Users/jing/Desktop/毕设/code_pycharm/pythonProject/legal-assistant/backend/data/laws/business_laws/公司法(2023-12-29).md")
 
-'''
+#     print(f"共生成 {len(chunks)} 个文本块")
 
-# 使用示例
-if __name__ == "__main__":
-    processor = LegalDocumentProcessor(max_chunk_size=1500)
-    chunks = processor.process_legal_markdown("/Users/jing/Desktop/毕设/code_pycharm/pythonProject/legal-assistant/backend/data/laws/business_laws/公司法(2023-12-29).md")
-
-    print(f"共生成 {len(chunks)} 个文本块")
-
-    for i, chunk in enumerate(chunks[:50]):  # 打印前10个块作为示例
-        print(f"\n=== 块 {i + 1} ===")
-        # 打印元数据
-        metadata = chunk["metadata"]
-        print("元数据:")
-        print(f"文档名称: {metadata['document_name']}")
-        print(f"生效日期: {metadata['effective_date']}")
-        print(f"是否生效: {metadata['is_effective']}")
-        if metadata['chapter']:
-            print(f"章: {metadata['chapter']}")
-        if metadata['section']:
-            print(f"节: {metadata['section']}")
+#     for i, chunk in enumerate(chunks[:50]):  # 打印前10个块作为示例
+#         print(f"\n=== 块 {i + 1} ===")
+#         # 打印元数据
+#         metadata = chunk["metadata"]
+#         print("元数据:")
+#         print(f"文档名称: {metadata['document_name']}")
+#         print(f"生效日期: {metadata['effective_date']}")
+#         print(f"是否生效: {metadata['is_effective']}")
+#         if metadata['chapter']:
+#             print(f"章: {metadata['chapter']}")
+#         if metadata['section']:
+#             print(f"节: {metadata['section']}")
         
-        # 打印内容
-        print("\n内容:")
-        print(chunk['content'])
-        print("-" * 80)
+#         # 打印内容
+#         print("\n内容:")
+#         print(chunk['content'])
+#         print("-" * 80)

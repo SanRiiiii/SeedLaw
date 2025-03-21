@@ -8,3 +8,10 @@ venv/
 .env
 models/
 data/
+*.log
+*.json
+*.md
+*.html
+*.txt
+*.pdf
+*.docx
