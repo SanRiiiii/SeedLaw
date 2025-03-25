@@ -36,9 +36,10 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # 向量嵌入模型设置
-    EMBEDDING_MODEL_NAME: str = "BAAI/bge-large-zh-v1.5"
-    EMBEDDING_DIMENSION: int = 1024
+    EMBEDDING_DIMENSION: int 
     EMBEDDING_MODEL_PATH: str
+    RERANKER_MODEL_PATH: str
+    RERANKER_DIMENSION: int 
 
     # 缓存设置
     CACHE_EXPIRATION: int = 3600  # 秒
