@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     RERANKER_MODEL_PATH: str
     RERANKER_DIMENSION: int 
 
+    # BM25配置
+    BM25_CACHE_DIR: str 
+
     # 缓存设置
     CACHE_EXPIRATION: int = 3600  # 秒
 

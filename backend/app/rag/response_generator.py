@@ -4,8 +4,15 @@ import httpx
 import asyncio
 import logging
 import re
+import os
+import sys
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
+ # 初始化检索器
+from app.rag.retriever import HybridRetriever
+        
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +33,12 @@ class DeepseekGenerator:
             "temperature": 0.15,
             "max_tokens": 1500
         }
+        self.retriever = HybridRetriever()
+       
 
     async def generate(self,
                        query: str,
-                       retrieved_docs: List[Dict[str, Any]],
+                       retrieved_docs: List[Dict[str, Any]] = None,
                        chat_history: Optional[List[Dict[str, str]]] = None,
                        **kwargs) -> Dict[str, Any]:
         """
@@ -45,6 +54,7 @@ class DeepseekGenerator:
         Returns:
             Dict: 包含生成的回答和引用的来源
         """
+
         # 构建提示
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(query, retrieved_docs)
@@ -67,7 +77,7 @@ class DeepseekGenerator:
 
         # 构建请求
         request_data = {
-            "model": "deepseek-v3",  # 使用火山引擎的Deepseek-v3模型
+            "model": "deepseek-v3-250324",  # 使用火山引擎的Deepseek-v3模型
             "messages": messages,
             **params
         }
@@ -100,7 +110,16 @@ class DeepseekGenerator:
                 return {
                     "answer": answer,
                     "sources": sources,
-                    "raw_response": response_data
+                    "raw_response": response_data,
+                    "retrieved_docs": [
+                        {
+                            "source": doc.get('source', ''),
+                            "title": doc.get('title', ''),
+                            "article_number": doc.get('article_number', ''),
+                            "text": doc.get('text', ''),
+                            "score": doc.get('score', 0.0)
+                        } for doc in retrieved_docs
+                    ]
                 }
 
         except Exception as e:
@@ -108,6 +127,8 @@ class DeepseekGenerator:
             return {
                 "answer": "抱歉，在生成回答时遇到了技术问题。请稍后再试。",
                 "sources": [],
+                "raw_response": None,
+                "retrieved_docs": [],
                 "error": str(e)
             }
 
@@ -137,9 +158,16 @@ class DeepseekGenerator:
         prompt += "以下是相关的法律依据：\n\n"
 
         for i, doc in enumerate(retrieved_docs, 1):
-            source = f"{doc.get('title', '未知来源')}"
+            # 构建来源信息
+            source_parts = []
+            if doc.get('source'):
+                source_parts.append(doc['source'])
+            if doc.get('title'):
+                source_parts.append(doc['title'])
             if doc.get('article_number'):
-                source += f" {doc.get('article_number')}"
+                source_parts.append(doc['article_number'])
+            
+            source = " - ".join(source_parts) if source_parts else "未知来源"
 
             prompt += f"[{i}] {source}:\n"
             prompt += f"{doc.get('text', '')}\n\n"
@@ -161,7 +189,8 @@ class DeepseekGenerator:
                 if 0 <= idx < len(retrieved_docs):
                     source = retrieved_docs[idx].copy()
                     # 删除一些不需要的字段
-                    for key in ['score', 'vector_score', 'keyword_score']:
+                    for key in ['score', 'vector_score', 'keyword_score', 'vector_rank', 'keyword_rank', 
+                              'alpha', 'vector_contribution', 'keyword_contribution']:
                         if key in source:
                             del source[key]
                     sources.append(source)
@@ -221,3 +250,18 @@ class CachedDeepseekGenerator(DeepseekGenerator):
     async def generate(self, query, retrieved_docs, chat_history=None, **kwargs):
         """带缓存的生成函数"""
         return await super().generate(query, retrieved_docs, chat_history, **kwargs)
+    
+
+
+if __name__ == "__main__":
+    generator = CachedDeepseekGenerator()
+    query = "什么是有限责任公司？"
+    retrieved_docs = []
+    try:
+            retrieved_docs = generator.retriever.retrieve(query)
+            logger.info(f"检索到 {len(retrieved_docs)} 条相关文档")
+    except Exception as e:
+            logger.error(f"检索文档时发生错误: {str(e)}")
+            retrieved_docs = []
+    result = asyncio.run(generator.generate(query, retrieved_docs))
+    print(result)
