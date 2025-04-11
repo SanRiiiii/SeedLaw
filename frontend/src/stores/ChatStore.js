@@ -23,14 +23,14 @@ export const useChatStore = defineStore('chat', () => {
   // 动作
   function createNewChat() {
     // 创建临时对话
-    const tempId = Date.now()
+    const tempId = Date.now() //改成uuid
     const newChat = {
       id: tempId,
       title: 'Untitled',
       isTemp: true
     }
     
-    chatList.value.push(newChat)
+    chatList.value.unshift(newChat)  // 使用 unshift 替代 push，将新对话添加到数组开头
     currentChatId.value = tempId
     chatMessages.value[tempId] = []
     
