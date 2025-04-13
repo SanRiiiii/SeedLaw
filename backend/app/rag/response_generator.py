@@ -17,7 +17,7 @@ from app.rag.retriever import HybridRetriever
 logger = logging.getLogger(__name__)
 
 
-class DeepseekGenerator:
+class Generator:
     """基于火山引擎Deepseek-v3的回答生成器"""
 
     def __init__(self):

@@ -90,7 +90,7 @@ def process_documents(docs_dir: str, output_dir: str, file_filter: str = None):
 
 if __name__ == "__main__":
 
-    docs_dir = "../data/laws/business_laws"  # 法律文档目录路径
-    output_dir = "../data/chunks"  # 输出目录路径
-    file_filter = "公司法"  # 文件名过滤器
-    process_documents(docs_dir, output_dir, file_filter)
+    docs_dir = "../data/laws/related_laws"  # 法律文档目录路径
+    output_dir = "../data/chunks/related_laws"  # 输出目录路径
+    # file_filter = "公司法"  # 文件名过滤器
+    process_documents(docs_dir, output_dir)

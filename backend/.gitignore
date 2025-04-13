@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+dist/
+build/
+*.egg-info/
+venv/
+.env
+models/
+data/
+node_modules/
+*.log
+*.md
+*.txt
+*.pdf
+*.docx

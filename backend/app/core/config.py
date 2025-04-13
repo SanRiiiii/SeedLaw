@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # BM25配置
     BM25_CACHE_DIR: str 
 
+    # 上下文长度
+    CONTEXT_LENGTH: int
+
     # 缓存设置
     CACHE_EXPIRATION: int = 3600  # 秒
 

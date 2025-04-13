@@ -51,14 +51,12 @@ class LegalDocumentProcessor:
             file_metadata = self._extract_metadata_from_filename(file_path)
             
             # 检查法律是否生效
-            effectiveness_info = self._check_law_effectiveness(md_content)
+            effectiveness_info = self._check_law_effectiveness(md_content,file_metadata["effective_date"])
 
             # 将字典中的值添加到file_metadata
             file_metadata["is_effective"] = effectiveness_info["is_effective"]
             file_metadata["effective_date"] = effectiveness_info["effective_date"]
-            # 如果effective_date是datetime对象，转换为字符串
-            if isinstance(file_metadata["effective_date"], datetime):
-                file_metadata["effective_date"] = file_metadata["effective_date"].strftime('%Y-%m-%d')
+          
 
             # 转换为 HTML
             html = markdown.markdown(md_content, extensions=['tables', 'fenced_code'])
@@ -77,15 +75,38 @@ class LegalDocumentProcessor:
         """从文件名提取基本元数据"""
         filename = os.path.basename(file_path)
         name, _ = os.path.splitext(filename)
-        law_name = name
         
-
+        # 先尝试提取带括号的日期格式 (YYYY-MM-DD)
+        date_match = re.search(r'\((\d{4}-\d{1,2}-\d{1,2})\)', name)
+        if date_match:
+            # 提取日期并转换为YYYYMMDD格式
+            date_str = date_match.group(1)
+            try:
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                effective_date = date_obj.strftime('%Y%m%d')
+                # 移除日期部分，得到纯法律名称
+                law_name = name.split('(')[0].strip()
+            except ValueError:
+                effective_date = ""
+                law_name = name
+        else:
+            # 尝试提取格式：法律名称-YYYYMMDD 或 法律名称_YYYYMMDD
+            date_match = re.search(r'[-_](\d{8})$', name)
+            if date_match:
+                effective_date = date_match.group(1)
+                # 移除日期部分，得到纯法律名称
+                law_name = re.sub(r'[-_]\d{8}$', '', name)
+            else:
+                effective_date = ""
+                law_name = name
+            
         # 返回基本信息
         return {
-            "document_name": law_name
+            "document_name": law_name,
+            "effective_date": effective_date
         }
 
-    def _check_law_effectiveness(self, content: str) -> Dict[str, Any]:
+    def _check_law_effectiveness(self, content: str, effective_date: str) -> Dict[str, Any]:
         """
         检查法律是否生效
         通过检查文档末尾的附则来判断法律是否生效
@@ -94,20 +115,39 @@ class LegalDocumentProcessor:
         end_content = content[-2000:]
         
         # 检查生效日期
+        # 部分文件的生效日期与发布日期不同，以此适配
         effective_date_match = re.search(r"本(?:法|条例|规定|细则|办法|规则|通知|决定)自(\d{4}年\d{1,2}月\d{1,2}日)起(?:施行|生效|实施)", end_content)
 
+        # 从文件内容提取到的生效日期
+        content_date = ""
         if effective_date_match:
             # 提取日期
             date_str = effective_date_match.group(1)
             date_str = re.sub(r'[年月]', '-', date_str).replace('日', '')
-            effective_date = datetime.strptime(date_str, '%Y-%m-%d')
-            print(effective_date)
-            # 如果生效日期在未来，则标记为未生效
-            if effective_date > datetime.now():
-                return {
-                    "is_effective": False,
-                    "effective_date": effective_date
-                }
+            try:
+                # 转换为datetime对象再转回字符串，确保格式一致
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                content_date = date_obj.strftime('%Y%m%d')
+            except ValueError:
+                content_date = ""
+        
+        # 优先使用文件内容提取的日期，如果没有则使用文件名中的日期
+        final_date = content_date if content_date else effective_date
+        
+        # 判断是否生效（仅用于比较）
+        is_effective = True
+        
+        # 如果有日期，判断是否生效
+        if final_date:
+            try:
+                # 将日期字符串转为datetime进行比较
+                date_obj = datetime.strptime(final_date, '%Y%m%d')
+                # 如果生效日期在未来，则标记为未生效
+                if date_obj > datetime.now():
+                    is_effective = False
+            except ValueError:
+                # 日期格式不正确，默认为生效
+                pass
             
         # 检查是否有废止或失效的明确标记
         ineffective_patterns = [
@@ -118,14 +158,12 @@ class LegalDocumentProcessor:
         
         for pattern in ineffective_patterns:
             if re.search(pattern, end_content):
-                return {
-                    "is_effective": False,
-                    "effective_date": effective_date
-                }   
+                is_effective = False
+                break
             
         return {
-            "is_effective": True,
-            "effective_date": effective_date
+            "is_effective": is_effective,
+            "effective_date": final_date  # 返回字符串格式的日期
         }
                
 
@@ -276,28 +314,3 @@ class LegalDocumentProcessor:
 
         return chunks
 
-
-# # 使用示例
-# if __name__ == "__main__":
-#     processor = LegalDocumentProcessor(max_chunk_size=1500)
-#     chunks = processor.process_legal_markdown("/Users/jing/Desktop/毕设/code_pycharm/pythonProject/legal-assistant/backend/data/laws/business_laws/公司法(2023-12-29).md")
-
-#     print(f"共生成 {len(chunks)} 个文本块")
-
-#     for i, chunk in enumerate(chunks[:50]):  # 打印前10个块作为示例
-#         print(f"\n=== 块 {i + 1} ===")
-#         # 打印元数据
-#         metadata = chunk["metadata"]
-#         print("元数据:")
-#         print(f"文档名称: {metadata['document_name']}")
-#         print(f"生效日期: {metadata['effective_date']}")
-#         print(f"是否生效: {metadata['is_effective']}")
-#         if metadata['chapter']:
-#             print(f"章: {metadata['chapter']}")
-#         if metadata['section']:
-#             print(f"节: {metadata['section']}")
-        
-#         # 打印内容
-#         print("\n内容:")
-#         print(chunk['content'])
-#         print("-" * 80)

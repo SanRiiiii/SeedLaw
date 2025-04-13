@@ -10,18 +10,17 @@ from app.rag.embedding import BGEEmbedding
 import json
 
 
-def setup_milvus_collection(collection_name,fields):
+def setup_milvus_collection(vector_db,collection_name,fields):
     """设置Milvus集合"""
     # 连接到Milvus服务
-    vector_db = VectorStore()
-    vector_db.connect_to_milvus()
+  
     if not vector_db.check_collection_exists(collection_name):
         vector_db.create_collection(fields,collection_name,description="法律文档分块集合")
     print(f"已成功创建集合 {collection_name} 并设置索引")
     return 
 
 
-def load_chunks_to_milvus(chunks_file, collection_name):
+def load_chunks_to_milvus(vector_db,chunks_file, collection_name):
     """将分块加载到Milvus"""
     # 加载分块
     with open(chunks_file, 'r', encoding='utf-8') as f:
@@ -30,10 +29,6 @@ def load_chunks_to_milvus(chunks_file, collection_name):
     # 初始化BGE嵌入模型
     embedder = BGEEmbedding()
     
-    # 连接到Milvus
-    connections.connect("default", host="localhost", port="19530")
-    collection = Collection(collection_name)
-    collection.load()
     
     # 准备数据
     uuids = []
@@ -82,19 +77,20 @@ def load_chunks_to_milvus(chunks_file, collection_name):
     for i in tqdm(range(0, len(uuids), batch_size)):
         end = min(i + batch_size, len(uuids))
         batch_entities = [entity[i:end] for entity in entities]
-        collection.insert(batch_entities)
+        result = vector_db.insert_vectors(collection_name,batch_entities)
+        if result is None:
+            print(f"插入数据失败: {result}")
     
-    # 刷新集合以确保数据可见
-    collection.flush()
+
     
     print(f"成功将 {len(uuids)} 个分块插入到 Milvus 集合 {collection_name}")
     
     # 显示集合统计信息
-    print(f"集合统计: {collection.num_entities} 个实体")
+    print(f"集合统计: {vector_db.get_collection_stats(collection_name)} 个实体")
     
-    return collection
+    return collection_name
 
-def test_vector_search(query, collection_name=None, top_k=5):
+def test_vector_search(vector_db,query, collection_name=None, top_k=5):
     """
     测试向量检索功能
     
@@ -111,8 +107,6 @@ def test_vector_search(query, collection_name=None, top_k=5):
         collection_name = settings.MILVUS_COLLECTION
     
     # 初始化向量存储和嵌入模型
-    vector_db = VectorStore()
-    vector_db.connect_to_milvus()
     embedder = BGEEmbedding()
     
     # 检查集合是否存在
@@ -150,30 +144,26 @@ def test_vector_search(query, collection_name=None, top_k=5):
 
 # 使用示例
 if __name__ == "__main__":
+    collection_name = settings.MILVUS_COLLECTION
+    vector_db = VectorStore()
+    vector_db.connect_to_milvus()
+    # chunks_dir = "../data/chunks/related_laws"
     
-
-    collection_name =settings.MILVUS_COLLECTION
-    # dim = settings.EMBEDDING_DIMENSION
-
-    # # 设置集合
-    # fields = [
-    #     FieldSchema(name="uuid", dtype=DataType.VARCHAR, is_primary=True, max_length=36),
-    #     FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=4096),
-    #     FieldSchema(name="document_name", dtype=DataType.VARCHAR, max_length=256),
-    #     FieldSchema(name="chapter", dtype=DataType.VARCHAR, max_length=256),
-    #     FieldSchema(name="section", dtype=DataType.VARCHAR, max_length=256),
-    #     FieldSchema(name="effective_date", dtype=DataType.VARCHAR, max_length=20),
-    #     FieldSchema(name="is_effective", dtype=DataType.BOOL),
-    #     FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=dim)
-    # ]
-
-    # setup_milvus_collection(collection_name,fields=fields)  # BGE-large-zh 维度为1024
+    # # 获取总文件数
+    # total_files = len(os.listdir(chunks_dir))
+    # processed_files = 0
     
-    # # 加载数据
-    # chunks_file = "../data/chunks/公司法(2023-12-29)_chunks.json"
-    # collection = load_chunks_to_milvus(chunks_file, collection_name)
+    # print(f"开始处理 {total_files} 个文件...")
+    # for file in os.listdir(chunks_dir):
+    #     try:
+    #         load_chunks_to_milvus(vector_db, os.path.join(chunks_dir, file), collection_name)
+    #         processed_files += 1
+    #     except Exception as e:
+    #         print(f"处理文件 {file} 时发生错误: {str(e)}")
+    
+    # print(f"\n处理完成！成功嵌入 {processed_files}/{total_files} 个文件")
     
     # 测试向量召回
     print("\n===== 测试向量召回功能 =====")
     test_query = input("请输入查询语句: ")
-    test_vector_search(test_query, collection_name)    
+    test_vector_search(vector_db,test_query, collection_name)
