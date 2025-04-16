@@ -9,11 +9,12 @@ from app.core.security import create_access_token, verify_password, SECRET_KEY, 
 from app.db.session import get_db
 from app.db.models import User
 from pydantic import BaseModel, EmailStr
+from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # 从请求头中提取令牌
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # Token 响应模型
 class Token(BaseModel):
@@ -80,7 +81,6 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
         )
     
     # 创建新用户
-    from app.core.security import get_password_hash
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password)

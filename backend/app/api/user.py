@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 from app.db.session import get_db
 from app.db.models import User, CompanyInfo
-from app.api.endpoints.auth import get_current_active_user
+from app.api.auth import get_current_active_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 

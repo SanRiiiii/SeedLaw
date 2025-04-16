@@ -10,6 +10,7 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 class Settings(BaseSettings):
     PROJECT_NAME: str = "法律知识助手"
     API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str
 
     # 数据库配置
     MYSQL_USER: str

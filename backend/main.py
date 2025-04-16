@@ -1,7 +1,7 @@
 # app/main.py - 应用入口
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import chat
+from app.api import api_router
 from app.db.session import engine
 from app.db.models import Base  
 
@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(chat.router)
+app.include_router(api_router)
 
 @app.get("/")
 async def root():

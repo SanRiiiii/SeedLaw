@@ -243,7 +243,7 @@ def cached_response(func):
 
 
 # 增强版的生成器，增加缓存功能
-class CachedDeepseekGenerator(DeepseekGenerator):
+class CachedDeepseekGenerator(Generator):
     """带缓存功能的Deepseek生成器"""
 
     @cached_response

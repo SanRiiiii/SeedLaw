@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.db.models import User, Conversation, Message
-from app.api.endpoints.auth import get_current_active_user
+from app.api.auth import get_current_active_user
 from app.rag.response_generator import Generator
 from app.conversations.conversation_managment import ConversationService
 from app.core.config import settings
@@ -23,7 +23,6 @@ class Source(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    company_metadata: Optional[dict] = None
     include_history: bool = True  # Whether to include conversation history context
 
 # 聊天响应模型
@@ -86,14 +85,18 @@ async def chat(
         conversation.id,
         "user",
         request.message,
-        request.company_metadata
     )
     
     # 如果可用，将公司上下文添加到查询中
     company_context = ""
     if current_user.company_info:
-        company_context = f"Company: {current_user.company_info.company_name}, Industry: {current_user.company_info.industry}"
-    
+        company_context = f"Company: {current_user.company_info.company_name},、
+          Industry: {current_user.company_info.industry},
+          Address: {current_user.company_info.address},
+          Financing Stage: {current_user.company_info.financing_stage},
+          Business Scope: {current_user.company_info.business_scope},
+          Additional Info: {current_user.company_info.additional_info}"
+
     # 准备查询
     enhanced_query = request.message
     
