@@ -134,7 +134,7 @@ class LegalDocumentProcessor:
         # 优先使用文件内容提取的日期，如果没有则使用文件名中的日期
         final_date = content_date if content_date else effective_date
         
-        # 判断是否生效（仅用于比较）
+        # 判断是否生效（仅用于比较） | bool类型
         is_effective = True
         
         # 如果有日期，判断是否生效

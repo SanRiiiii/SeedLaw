@@ -18,6 +18,7 @@ declare module 'vue' {
     AuthModal: typeof import('./src/components/Auth/AuthModal.vue')['default']
     ChatInput: typeof import('./src/components/Chat/ChatInput.vue')['default']
     ChatList: typeof import('./src/components/Sidebar/ChatList.vue')['default']
+    CompanyInfoForm: typeof import('./src/components/Settings/CompanyInfoForm.vue')['default']
     MessageList: typeof import('./src/components/Chat/MessageList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

@@ -1,23 +1,18 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-
+import datetime
+import logging
 from app.db.session import get_db
 from app.db.models import User, Conversation, Message
 from app.api.auth import get_current_active_user
-from app.rag.response_generator import Generator
-from app.conversations.conversation_managment import ConversationService
-from app.core.config import settings
+from app.chat_management.chat_service import get_chat_service
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-rag_service = Generator()
-conversation_service = ConversationService()
-
-# 来源模型
-class Source(BaseModel):
-    title: str
-    content: str
 
 # 聊天请求模型
 class ChatRequest(BaseModel):
@@ -28,115 +23,88 @@ class ChatRequest(BaseModel):
 # 聊天响应模型
 class ChatResponse(BaseModel):
     reply: str
-    sources: List[Source] = []
+    sources: List = []
     conversation_id: str
 
 # 对话模型
 class ConversationModel(BaseModel):
     id: str
     title: str
-    created_at: str
-    
+    created_at: datetime.datetime
+
     class Config:
         orm_mode = True
+        json_encoders = {
+            datetime.datetime: lambda v: v.isoformat()
+        }
 
 # 消息模型
 class MessageModel(BaseModel):
     id: int
     role: str
     content: str
-    created_at: str
+    created_at: datetime.datetime
     
     class Config:
         orm_mode = True
+        json_encoders = {
+            datetime.datetime: lambda v: v.isoformat()
+        }
 
 # 包含消息的对话模型
 class ConversationWithMessages(ConversationModel):
     messages: List[MessageModel]
 
-@router.post("", response_model=ChatResponse)
-async def chat(
+
+# 创建聊天服务实例 - 纯工作流模式
+chat_service = get_chat_service()
+
+
+@router.post("/generate_chat", response_model=ChatResponse)
+async def generate_chat(
     request: ChatRequest, 
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Handle chat request and save to conversation history"""
-    # 获取或者创建对话
-    conversation = None
-    if request.conversation_id:
-        # 获取现有对话
-        conversation = db.query(Conversation).filter(
-            Conversation.id == request.conversation_id,
-            Conversation.user_id == current_user.id
-        ).first()
+    """处理聊天请求并保存到会话历史"""
+    try:
+        # 准备用户上下文
+        user_context = None
+        if current_user.company_info:
+            user_context = {
+                "company": {
+                    "company_name": current_user.company_info.company_name,
+                    "industry": current_user.company_info.industry,
+                    "address": current_user.company_info.address,
+                    "financing_stage": current_user.company_info.financing_stage,
+                    "business_scope": current_user.company_info.business_scope,
+                    "additional_info": current_user.company_info.additional_info
+                }
+            }
         
-        if not conversation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation not found"
-            )
-    else:
-        # 创建新对话
-        conversation = conversation_service.create_new_conversation(db, current_user.id)
-    
-    # 保存用户消息
-    conversation_service.save_message(
-        db,
-        conversation.id,
-        "user",
-        request.message,
-    )
-    
-    # 如果可用，将公司上下文添加到查询中
-    company_context = ""
-    if current_user.company_info:
-        company_context = f"Company: {current_user.company_info.company_name},、
-          Industry: {current_user.company_info.industry},
-          Address: {current_user.company_info.address},
-          Financing Stage: {current_user.company_info.financing_stage},
-          Business Scope: {current_user.company_info.business_scope},
-          Additional Info: {current_user.company_info.additional_info}"
+        # 使用聊天服务处理请求 - 所有数据库操作都在服务内处理
+        response = await chat_service.process_chat(
+            query=request.message,
+            conversation_id=request.conversation_id,
+            db_session=db,
+            user_id=current_user.id,
+            user_context=user_context,
+            include_history=request.include_history
+        )
+        
+        return ChatResponse(
+            reply=response["answer"],
+            sources=response.get("sources", []),
+            conversation_id=response["conversation_id"]
+        )
+    except Exception as e:
+        logger.error(f"处理聊天请求时发生错误: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
-    # 准备查询
-    enhanced_query = request.message
-    
-    # 如果请求包含历史，将历史添加到查询中
-    conversation_history = ""
-    if request.include_history and request.conversation_id:
-        # 从对话历史中获取最后N条消息
-        history = conversation_service.get_conversation_history(db, conversation.id, limit=settings.CONTEXT_LENGTH)
-        if history:
-            conversation_history = conversation_service.format_history_for_llm(history)
-    
-    # 将上下文添加到查询中
-    if conversation_history:
-        enhanced_query = f"Conversation history:\n{conversation_history}\n\nCurrent message: {request.message}"
-    
-    # 如果可用，将公司上下文添加到查询中
-    if company_context:
-        enhanced_query = f"{enhanced_query}\n\nContext: {company_context}"
-    
-    # 从RAG服务获取回复
-    reply, sources = rag_service.get_response(enhanced_query)
-    
-    # 保存助手消息
-    conversation_service.save_message(
-        db,
-        conversation.id,
-        "assistant",
-        reply,
-        {"sources": [{"title": s.title, "content": s.content} for s in sources]}
-    )
-    
-    # 如果对话是新对话，更新对话标题
-    conversation_service.update_conversation_title(db, conversation.id, request.message)
-    
-    return ChatResponse(
-        reply=reply,
-        sources=sources,
-        conversation_id=conversation.id
-    )
-
+# 登陆后，获取所有对话 
 @router.get("/conversations", response_model=List[ConversationModel])
 async def get_conversations(
     current_user: User = Depends(get_current_active_user),
@@ -149,6 +117,7 @@ async def get_conversations(
     
     return conversations
 
+# 获取某一个对话
 @router.get("/conversations/{conversation_id}", response_model=ConversationWithMessages)
 async def get_conversation(
     conversation_id: str,

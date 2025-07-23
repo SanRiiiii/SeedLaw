@@ -7,8 +7,9 @@ const authStore = useAuthStore();
 const chatStore = useChatStore();
 
 // 在应用启动时初始化认证状态
-onMounted(async () => {
-  await authStore.init();
+onMounted(() => {
+  // 初始化认证状态
+  authStore.init();
 });
 
 // 监听认证状态变化

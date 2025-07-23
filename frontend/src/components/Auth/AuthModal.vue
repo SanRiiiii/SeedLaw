@@ -13,11 +13,11 @@
         layout="vertical"
       >
         <a-form-item
-          label="用户名"
-          name="username"
-          :rules="[{ required: true, message: '请输入用户名' }]"
+          label="邮箱"
+          name="email"
+          :rules="[{ required: true, message: '请输入邮箱' }]"
         >
-          <a-input v-model:value="formData.username" placeholder="请输入用户名" />
+          <a-input v-model:value="formData.email" placeholder="请输入邮箱" />
         </a-form-item>
         
         <a-form-item
@@ -67,7 +67,7 @@ const isLogin = ref(true);
 const loading = ref(false);
 
 const formData = ref({
-  username: '',
+  email: '',
   password: '',
   confirmPassword: ''
 });
@@ -82,7 +82,7 @@ watch(() => props.visible, (newVal) => {
 // 重置表单
 const resetForm = () => {
   formData.value = {
-    username: '',
+    email: '',
     password: '',
     confirmPassword: ''
   };
@@ -101,7 +101,7 @@ const validateConfirmPassword = async (rule, value) => {
 const toggleAuthMode = () => {
   isLogin.value = !isLogin.value;
   formData.value = {
-    username: '',
+    email: '',
     password: '',
     confirmPassword: ''
   };
@@ -112,9 +112,9 @@ const handleSubmit = async () => {
   loading.value = true;
   try {
     if (isLogin.value) {
-      await authStore.login(formData.value.username, formData.value.password);
+      await authStore.login(formData.value.email, formData.value.password);
     } else {
-      await authStore.register(formData.value.username, formData.value.password);
+      await authStore.register(formData.value.email, formData.value.password);
     }
     // 这里不需要手动关闭模态框，登录/注册成功后AuthStore会自动关闭
     emit('success');

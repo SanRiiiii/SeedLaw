@@ -52,14 +52,23 @@ const authStore = useAuthStore();
 const messagesContainer = ref(null);
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
   // 尝试加载用户数据
-  authStore.init().then(() => {
-    // 如果用户已登录，加载聊天数据
-    if (authStore.isAuthenticated) {
-      chatStore.initUserChats();
+  await authStore.init();
+  
+  // 如果用户已登录，确保加载聊天数据
+  if (authStore.isAuthenticated) {
+    await chatStore.initUserChats();
+    
+    // 如果有当前聊天，确保加载消息
+    if (chatStore.currentChatId) {
+      await chatStore.loadChatMessages(chatStore.currentChatId);
     }
-  });
+  }
+  
+  // 初始滚动到底部
+  await nextTick();
+  scrollToBottom();
 });
 
 // 发送消息
@@ -79,21 +88,32 @@ const sendMessage = async (content) => {
       await chatStore.createNewChat();
     }
     
-    await chatStore.sendMessage(content);
+    // 发送消息并获取响应
+    const response = await chatStore.sendMessage(content);
+    console.log('消息发送成功，响应:', response);
+    
+    // 滚动到底部
+    await nextTick();
+    scrollToBottom();
   } catch (error) {
+    console.error('发送消息失败:', error);
     if (error.message === '请先登录') {
       message.warning('请先登录');
       authStore.openLoginModal();
     } else {
-      message.error('发送消息失败');
+      message.error('发送消息失败: ' + (error.message || '未知错误'));
     }
   }
 };
 
 // 当消息列表更新时，滚动到底部
-watch(() => chatStore.currentMessages, async () => {
+watch(() => chatStore.currentMessages, async (newMessages) => {
+  // 确保DOM更新后滚动
   await nextTick();
   scrollToBottom();
+  
+  // 调试消息列表
+  console.log('当前消息列表:', newMessages);
 }, { deep: true });
 
 // 当切换对话时，滚动到底部

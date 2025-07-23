@@ -9,5 +9,17 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src')
     }
+  },
+  server: {
+    port: 5174,
+    strictPort: false,
+    cors: true,
+    hmr: {
+      overlay: true,
+    },
+    headers: {
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache'
+    }
   }
 }) 

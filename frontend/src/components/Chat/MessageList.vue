@@ -28,8 +28,9 @@
 
 <script setup>
 import { MessageOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons-vue';
+import { onMounted, watch } from 'vue';
 
-defineProps({
+const props = defineProps({
   messages: {
     type: Array,
     default: () => []
@@ -39,6 +40,19 @@ defineProps({
     default: false
   }
 });
+
+// 调试日志，确保消息正确传递
+onMounted(() => {
+  if (props.messages.length > 0) {
+    console.log('初始消息列表:', props.messages);
+  }
+});
+
+watch(() => props.messages, (newMessages) => {
+  if (newMessages.length > 0) {
+    console.log('消息列表更新:', newMessages);
+  }
+}, { deep: true });
 </script>
 
 <style scoped>

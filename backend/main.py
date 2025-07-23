@@ -13,7 +13,7 @@ app = FastAPI(title="法律知识问答系统")
 # 允许跨域请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 前端地址
+    allow_origins=["http://localhost:5173"],  # 前端地址
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

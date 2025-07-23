@@ -41,7 +41,15 @@ export async function createChat() {
 export async function getChatReply(chatId, content) {
   // 使用实际的API调用
   try {
-    const response = await chatApi.post(`/chats/${chatId}/messages`, { content });
+    const payload = {
+      message: content,
+      conversation_id: chatId,
+      include_history: true
+    };
+    
+    console.log("发送聊天请求:", payload);
+    const response = await chatApi.post(`/chat/generate_chat`, payload);
+    console.log("收到聊天响应:", response.data);
     return response.data;
   } catch (error) {
     console.error('Failed to get chat reply:', error);
@@ -60,7 +68,7 @@ export async function getChatReply(chatId, content) {
 // 获取用户的对话列表
 export async function getChatList() {
   try {
-    const response = await chatApi.get('/chats');
+    const response = await chatApi.get('/chat/conversations');
     return response.data;
   } catch (error) {
     console.error('Failed to get chat list:', error);
@@ -71,7 +79,7 @@ export async function getChatList() {
 // 获取特定对话的消息历史
 export async function getChatHistory(chatId) {
   try {
-    const response = await chatApi.get(`/chats/${chatId}/messages`);
+    const response = await chatApi.get(`/chat/conversations/${chatId}`);
     return response.data;
   } catch (error) {
     console.error('Failed to get chat history:', error);
@@ -82,10 +90,21 @@ export async function getChatHistory(chatId) {
 // 删除对话
 export async function deleteChat(chatId) {
   try {
-    const response = await chatApi.delete(`/chats/${chatId}`);
+    const response = await chatApi.delete(`/chat/conversations/${chatId}`);
     return response.data;
   } catch (error) {
     console.error('Failed to delete chat:', error);
+    throw error;
+  }
+}
+
+// 更新对话标题
+export async function updateChatTitle(chatId, title) {
+  try {
+    const response = await chatApi.put(`/chat/conversations/${chatId}/title`, { title });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to update chat title:', error);
     throw error;
   }
 }

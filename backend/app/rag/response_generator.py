@@ -10,36 +10,38 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
- # 初始化检索器
-from app.rag.retriever import HybridRetriever
+from app.models.llm import get_llm_service, LLMService
+# 初始化检索器
+from app.rag.HybridRetriever import HybridRetriever
         
 
 logger = logging.getLogger(__name__)
 
 
 class Generator:
-    """基于火山引擎Deepseek-v3的回答生成器"""
+    """基于大语言模型的回答生成器"""
 
-    def __init__(self):
-        self.api_key = settings.VOLCENGINE_API_KEY
-        self.api_url = settings.VOLCENGINE_API_URL
-        self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-        # 默认参数设置
-        self.default_params = {
-            "top_p": 0.8,
-            "temperature": 0.15,
-            "max_tokens": 1500
-        }
+    def __init__(self, llm_service: LLMService = None):
+        """
+        初始化生成器
+        
+        Args:
+            llm_service: 大语言模型服务，如果为None则使用默认服务
+        """
+        # 使用提供的LLM服务或创建新的
+        self.llm_service = llm_service or get_llm_service(
+            model=settings.SILICONFLOW_MODEL,
+            api_url=settings.SILICONFLOW_API_URL,
+            api_key=settings.SILICONFLOW_API_KEY,
+            temperature=0.15,
+            max_tokens=4000
+        )
         self.retriever = HybridRetriever()
        
 
     async def generate(self,
                        query: str,
                        retrieved_docs: List[Dict[str, Any]] = None,
-                       chat_history: Optional[List[Dict[str, str]]] = None,
                        **kwargs) -> Dict[str, Any]:
         """
         根据检索到的文档生成回答
@@ -62,65 +64,39 @@ class Generator:
         # 构建消息历史
         messages = [{"role": "system", "content": system_prompt}]
 
-        # 添加历史对话（如果有）
-        if chat_history:
-            # 限制历史消息数量，避免超出上下文窗口
-            for msg in chat_history[-5:]:  # 只保留最近5轮对话
-                messages.append(msg)
 
         # 添加当前问题
         messages.append({"role": "user", "content": user_prompt})
 
-        # 合并默认参数和自定义参数
-        params = self.default_params.copy()
-        params.update(kwargs)
-
-        # 构建请求
-        request_data = {
-            "model": "deepseek-v3-250324",  # 使用火山引擎的Deepseek-v3模型
-            "messages": messages,
-            **params
-        }
-
         try:
-            # 发送请求到火山引擎API
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    self.api_url,
-                    headers=self.headers,
-                    json=request_data
-                )
-
-                if response.status_code != 200:
-                    logger.error(f"API请求失败: {response.status_code}, {response.text}")
-                    return {
-                        "answer": "抱歉，在生成回答时遇到了问题。请稍后再试。",
-                        "sources": [],
-                        "error": f"API错误: {response.status_code}"
-                    }
-
-                response_data = response.json()
-
-                # 解析回答
-                answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-                # 提取引用的法律依据
-                sources = self._extract_sources_from_answer(answer, retrieved_docs)
-
+            # 使用LLM服务获取回答
+            response_data = await self.llm_service.chat_completion(messages, **kwargs)
+            
+            # 检查是否有错误
+            if "error" in response_data:
+                logger.error(f"生成回答时发生错误: {response_data['error']}")
                 return {
-                    "answer": answer,
-                    "sources": sources,
-                    "raw_response": response_data,
-                    "retrieved_docs": [
-                        {
-                            "source": doc.get('source', ''),
-                            "title": doc.get('title', ''),
-                            "article_number": doc.get('article_number', ''),
-                            "text": doc.get('text', ''),
-                            "score": doc.get('score', 0.0)
-                        } for doc in retrieved_docs
-                    ]
+                    "answer": "抱歉，在生成回答时遇到了问题。请稍后再试。",
+                    "sources": [],
+                    "error": response_data["error"]
                 }
+            
+            # 解析回答
+            answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            return {
+                "answer": answer,
+                "retrieved_docs": [
+                    {
+                        "source": doc.get('source', ''),
+                        "title": doc.get('title', ''),
+                        "article_number": doc.get('article_number', ''),
+                        "text": doc.get('text', ''),
+                        "score": doc.get('score', 0.0)
+                    } for doc in retrieved_docs
+                ],
+                "sources": self._extract_sources_from_answer(answer, retrieved_docs)
+            }
 
         except Exception as e:
             logger.exception(f"生成回答时发生错误: {str(e)}")
@@ -136,21 +112,24 @@ class Generator:
         """构建系统提示"""
         return """你是一个专业的法律顾问，专注于为中国科技创业者提供准确的法律信息和建议。
 你的回答需要：
-1. 使用简明易懂的语言解释复杂的法律概念，避免过多专业术语。
-2. 基于提供的法律信息给出具体、实用的建议。
-3. 清晰标明引用的法律依据，使用[n]格式引用相关法条或规定，如[1]、[2]等。
-4. 如果提供的信息不足以完全回答问题，请诚实说明并提供基于已知信息的最佳建议。
-5. 解释法律风险并提供可能的解决方案。
-6. 避免给出过于绝对的法律判断，而是强调法律适用的可能性。
-7. 提醒用户在处理重要法律事务时咨询专业律师。
+1. 基于提供的法律信息给出具体、实用的建议，不要偏离给出的法律依据！！
+2. 清晰标明引用的法律依据，使用[n]格式引用相关法条或规定，如[1]、[2]等。
+3. 如果提供的信息不足以完全回答问题，请诚实说明并提供基于已知信息的最佳建议。
+4. 解释法律风险并提供可能的解决方案。
+5. 避免给出过于绝对的法律判断，而是强调法律适用的可能性。
+6. 提醒用户在处理重要法律事务时咨询专业律师。
 
-在回答中，请遵循以下格式：
-1. 简短总结你对问题的理解
+在回答中，必须遵循以下格式：
+1. 用plain text格式回答,不要使用markdown格式,不要使用markdown格式,不要使用markdown格式
 2. 根据法律依据详细解答问题
 3. 在回答相关部分引用具体法条[n]
-4. 如果有实用的建议或风险提示，请在最后给出
+4. 在回答最后，添加"【法律依据】"部分，完整列出所有引用的法律条文，格式如：
+   【法律依据】
+   [1] 《中华人民共和国公司法》第二条：有限责任公司是指...
+   [2] 《中华人民共和国民法典》第六十条：...
+5. 如果有实用的建议或风险提示，请在法律依据之前给出
 
-记住，你是一个帮助科技创业者理解法律、规避风险的顾问，你的目标是提供既准确又实用的法律指导。"""
+请确保你引用的每个法条编号[n]都准确对应提供给你的法律依据列表中的编号。不要自行编造法条内容，只能引用我提供给你的法律依据。"""
 
     def _build_user_prompt(self, query: str, retrieved_docs: List[Dict[str, Any]]) -> str:
         """构建用户提示，包含查询和检索到的文档"""
@@ -160,19 +139,31 @@ class Generator:
         for i, doc in enumerate(retrieved_docs, 1):
             # 构建来源信息
             source_parts = []
-            if doc.get('source'):
-                source_parts.append(doc['source'])
-            if doc.get('title'):
-                source_parts.append(doc['title'])
-            if doc.get('article_number'):
-                source_parts.append(doc['article_number'])
+            if doc.get('document_name'):
+                source_parts.append(doc.get('document_name'))
+            elif doc.get('source'):
+                source_parts.append(doc.get('source'))
+                
+            if doc.get('chapter'):
+                source_parts.append(doc.get('chapter'))
+            elif doc.get('title'):
+                source_parts.append(doc.get('title'))
+                
+            if doc.get('section'):
+                source_parts.append(doc.get('section'))
+            elif doc.get('article_number'):
+                source_parts.append(doc.get('article_number'))
+            
+            is_effective = doc.get('is_effective', True)
+            effective_status = "（现行有效）" if is_effective else "（已失效）"
             
             source = " - ".join(source_parts) if source_parts else "未知来源"
+            source += effective_status
 
             prompt += f"[{i}] {source}:\n"
-            prompt += f"{doc.get('text', '')}\n\n"
+            prompt += f"{doc.get('text', '') or doc.get('content', '')}\n\n"
 
-        prompt += "请根据以上法律依据回答我的问题，并在回答中引用相关的法条编号[n]。"
+        prompt += "请根据以上法律依据回答我的问题，必须在回答中准确引用相关的法条编号[n]，并在回答最后列出所有引用的法条原文。"
         return prompt
 
     def _extract_sources_from_answer(self, answer: str, retrieved_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -187,12 +178,13 @@ class Generator:
             try:
                 idx = int(citation) - 1
                 if 0 <= idx < len(retrieved_docs):
-                    source = retrieved_docs[idx].copy()
-                    # 删除一些不需要的字段
-                    for key in ['score', 'vector_score', 'keyword_score', 'vector_rank', 'keyword_rank', 
-                              'alpha', 'vector_contribution', 'keyword_contribution']:
-                        if key in source:
-                            del source[key]
+                    source = {
+                        "source": retrieved_docs[idx].get('source', '') or retrieved_docs[idx].get('document_name', ''),
+                        "title": retrieved_docs[idx].get('title', '') or retrieved_docs[idx].get('chapter', ''),
+                        "article_number": retrieved_docs[idx].get('article_number', '') or retrieved_docs[idx].get('section', ''),
+                        "text": retrieved_docs[idx].get('text', '') or retrieved_docs[idx].get('content', ''),
+                        "citation_number": citation
+                    }
                     sources.append(source)
             except (ValueError, IndexError):
                 logger.warning(f"无效的引用编号: {citation}")
@@ -200,68 +192,17 @@ class Generator:
         return sources
 
 
-# 简单的缓存装饰器，用于减少重复请求
-def cached_response(func):
-    """缓存装饰器，基于查询和检索文档的哈希值缓存响应"""
-    cache = {}
-
-    async def wrapper(self, query, retrieved_docs, *args, **kwargs):
-        # 创建缓存键
-        cache_key = _create_cache_key(query, retrieved_docs)
-
-        # 如果在缓存中，直接返回
-        if cache_key in cache:
-            return cache[cache_key]
-
-        # 否则执行函数并缓存结果
-        result = await func(self, query, retrieved_docs, *args, **kwargs)
-        cache[cache_key] = result
-
-        # 限制缓存大小
-        if len(cache) > 100:  # 保留最近的100个响应
-            # 删除最早的缓存项
-            oldest_key = next(iter(cache))
-            del cache[oldest_key]
-
-        return result
-
-    def _create_cache_key(query, docs):
-        """创建缓存键"""
-        # 从文档中提取ID和分数
-        doc_signatures = []
-        for doc in docs:
-            sig = f"{doc.get('id', '')}_{doc.get('score', 0):.4f}"
-            doc_signatures.append(sig)
-
-        # 合并查询和文档签名
-        key = f"{query}_{','.join(doc_signatures)}"
-
-        # 使用哈希值减小键的大小
-        return hash(key)
-
-    return wrapper
 
 
-# 增强版的生成器，增加缓存功能
-class CachedDeepseekGenerator(Generator):
-    """带缓存功能的Deepseek生成器"""
-
-    @cached_response
-    async def generate(self, query, retrieved_docs, chat_history=None, **kwargs):
-        """带缓存的生成函数"""
-        return await super().generate(query, retrieved_docs, chat_history, **kwargs)
-    
-
-
-if __name__ == "__main__":
-    generator = CachedDeepseekGenerator()
-    query = "什么是有限责任公司？"
-    retrieved_docs = []
-    try:
-            retrieved_docs = generator.retriever.retrieve(query)
-            logger.info(f"检索到 {len(retrieved_docs)} 条相关文档")
-    except Exception as e:
-            logger.error(f"检索文档时发生错误: {str(e)}")
-            retrieved_docs = []
-    result = asyncio.run(generator.generate(query, retrieved_docs))
-    print(result)
+# if __name__ == "__main__":
+#     generator = CachedDeepseekGenerator()
+#     query = "什么是有限责任公司？"
+#     retrieved_docs = []
+#     try:
+#             retrieved_docs = generator.retriever.retrieve(query)
+#             logger.info(f"检索到 {len(retrieved_docs)} 条相关文档")
+#     except Exception as e:
+#             logger.error(f"检索文档时发生错误: {str(e)}")
+#             retrieved_docs = []
+#     result = asyncio.run(generator.generate(query, retrieved_docs))
+#     print(result)

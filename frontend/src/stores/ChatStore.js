@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { createChat, getChatReply, getChatList, getChatHistory, deleteChat } from '../api/chat'
+import { createChat, getChatReply, getChatList, getChatHistory, deleteChat, updateChatTitle as apiUpdateChatTitle } from '../api/chat'
 import { useAuthStore } from './AuthStore'
 
 // 记得去App那里注册一下
@@ -30,8 +30,8 @@ export const useChatStore = defineStore('chat', () => {
     
     isLoading.value = true;
     try {
-      const response = await getChatList();
-      chatList.value = response.chats || [];
+      const conversations = await getChatList();
+      chatList.value = conversations || [];
       
       // 如果有对话，自动选择第一个
       if (chatList.value.length > 0) {
@@ -57,8 +57,16 @@ export const useChatStore = defineStore('chat', () => {
     
     isLoading.value = true;
     try {
-      const response = await getChatHistory(chatId);
-      chatMessages.value[chatId] = response.messages || [];
+      const conversation = await getChatHistory(chatId);
+      // 确保保存的消息格式与MessageList组件兼容
+      if (conversation.messages && Array.isArray(conversation.messages)) {
+        chatMessages.value[chatId] = conversation.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
+      } else {
+        chatMessages.value[chatId] = [];
+      }
     } catch (error) {
       console.error(`Failed to load messages for chat ${chatId}:`, error);
     } finally {
@@ -73,8 +81,8 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error('请先登录');
     }
     
-    // 创建新对话
-    const tempId = Date.now();
+    // 创建临时对话
+    const tempId = 'temp_' + Date.now().toString();
     const newChat = {
       id: tempId,
       title: 'Untitled',
@@ -97,40 +105,58 @@ export const useChatStore = defineStore('chat', () => {
     isLoading.value = true
     
     try {
+      // 使用当前对话ID
+      const sendChatId = currentChatId.value;
+      
       // 将用户消息添加到当前对话
+      if (!chatMessages.value[currentChatId.value]) {
+        chatMessages.value[currentChatId.value] = [];
+      }
+      
       chatMessages.value[currentChatId.value].push({
         role: 'user',
         content
-      })
+      });
       
       // 调用API发送消息
-      const response = await getChatReply(currentChatId.value, content)
+      const response = await getChatReply(sendChatId, content);
       
       // 处理API响应
       if (chatList.value.find(c => c.id === currentChatId.value)?.isTemp) {
         // 如果是临时对话，更新对话信息
-        const index = chatList.value.findIndex(c => c.id === currentChatId.value)
+        const index = chatList.value.findIndex(c => c.id === currentChatId.value);
+        const newChatId = response.conversation_id;
+        
+        // 更新对话信息
         chatList.value[index] = {
-          id: response.chatId,
-          title: response.chatSummary,
+          id: newChatId,
+          title: content.length > 20 ? content.substring(0, 20) + '...' : content,
           isTemp: false
-        }
+        };
         
         // 更新消息列表的键
-        chatMessages.value[response.chatId] = chatMessages.value[currentChatId.value]
-        delete chatMessages.value[currentChatId.value]
-        currentChatId.value = response.chatId
+        chatMessages.value[newChatId] = chatMessages.value[currentChatId.value];
+        delete chatMessages.value[currentChatId.value];
+        currentChatId.value = newChatId;
+        
+        console.log('对话已从临时ID转换为永久ID:', {
+          oldId: currentChatId.value,
+          newId: newChatId
+        });
       }
       
       // 添加AI回复到消息列表
       chatMessages.value[currentChatId.value].push({
         role: 'assistant',
         content: response.reply
-      })
+      });
+      
+      return response;
     } catch (error) {
-      console.error('Failed to send message:', error)
+      console.error('Failed to send message:', error);
+      throw error;
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
   }
 
@@ -144,12 +170,15 @@ export const useChatStore = defineStore('chat', () => {
     // 检查用户是否已登录
     if (!authStore.isAuthenticated) return;
     
-    const index = chatList.value.findIndex(chat => chat.id === chatId)
-    if (index !== -1) {
-      chatList.value[index].title = newTitle
+    try {
+      await apiUpdateChatTitle(chatId, newTitle);
       
-      // 实际项目中这里会调用API
-      // await updateChat(chatId, { title: newTitle })
+      const index = chatList.value.findIndex(chat => chat.id === chatId)
+      if (index !== -1) {
+        chatList.value[index].title = newTitle
+      }
+    } catch (error) {
+      console.error('Failed to update chat title:', error);
     }
   }
   

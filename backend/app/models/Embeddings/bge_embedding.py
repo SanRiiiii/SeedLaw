@@ -1,29 +1,42 @@
+'''
+提供和embedding模型交互的接口
+
+
+'''
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 from transformers import AutoTokenizer, AutoModel
 import numpy as np
 from tqdm import tqdm
-from dotenv import load_dotenv
-import os
+import logging
+from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
+settings = Settings()
 
 class BGEEmbedding:
     """BGE嵌入模型封装"""
     
-    def __init__(self, model_name=None):
-        # 从环境变量获取模型路径
-        load_dotenv()
-        
-        # 使用环境变量中的模型路径，如果没有则使用默认值
-        model_path = os.getenv("EMBEDDING_MODEL_PATH", "BAAI/bge-large-zh-v1.5")
-        
-        # 如果提供了model_name参数，则优先使用它
-        if model_name:
-            model_path = model_name
+    def __init__(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_path = settings.EMBEDDING_MODEL_PATH
+        try:
+    
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, local_files_only=True)
+            self.model = AutoModel.from_pretrained(self.model_path, local_files_only=True)
+
+            # 如果有GPU，将模型移到GPU上
+            if torch.cuda.is_available():
+                self.model = self.model.to("cuda")
             
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModel.from_pretrained(model_path)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model.to(self.device)
-        
+            self.is_initialized = True
+            logger.info(f"词向量器初始化成功: {self.model_path}")
+        except Exception as e:
+            logger.error(f"初始化词向量器失败: {e}")
+            self.is_initialized = False
+
     def encode(self, texts, batch_size=32, normalize=True):
         """
         将文本编码为向量

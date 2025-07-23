@@ -7,22 +7,20 @@ from app.db.session import get_db
 from app.db.models import User, CompanyInfo
 from app.api.auth import get_current_active_user
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/info", tags=["info"])
 
 # Company info model
 class CompanyInfoModel(BaseModel):
     company_name: str
     industry: Optional[str] = None
     address: Optional[str] = None
-    contact_phone: Optional[str] = None
-    company_size: Optional[str] = None
+    financing_stage: Optional[str] = None
     business_scope: Optional[str] = None
     additional_info: Optional[dict] = None
     
     class Config:
         orm_mode = True
 
-# User with company info
 class UserWithCompany(BaseModel):
     id: int
     email: str
@@ -43,13 +41,10 @@ def update_company_info(
     db: Session = Depends(get_db)
 ):
     """Update or create company information for current user"""
-    # Check if company info exists
     if current_user.company_info:
-        # Update existing
         for key, value in company_data.dict(exclude_unset=True).items():
             setattr(current_user.company_info, key, value)
     else:
-        # Create new
         company_info = CompanyInfo(**company_data.dict(), user_id=current_user.id)
         db.add(company_info)
     

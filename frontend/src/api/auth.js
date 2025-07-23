@@ -8,27 +8,36 @@ const authApi = axios.create({
 
 /**
  * 用户登录
- * @param {string} username 用户名
+ * @param {string} email 邮箱
  * @param {string} password 密码
  * @returns {Promise<Object>} 用户信息和token
  */
-export async function login(username, password) {
-  const response = await authApi.post('/auth/login', {
-    username,
-    password
-  });
-  return response.data;
+export async function login(email, password) {
+      // 创建一个表单数据对象
+  const formData = new URLSearchParams();
+  formData.append('username', email);  // OAuth2 表单期望的是 username 字段
+  formData.append('password', password);
+  try {
+    const response = await authApi.post('/auth/login', formData, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('完整错误:', error);
+    console.error('错误详情:', error.response?.data);
+    throw error;
+  }
 }
 
 /**
  * 用户注册
- * @param {string} username 用户名
+ * @param {string} email 邮箱
  * @param {string} password 密码
  * @returns {Promise<Object>} 用户信息和token
  */
-export async function register(username, password) {
+export async function register(email, password) {
   const response = await authApi.post('/auth/register', {
-    username,
+    email,
     password
   });
   return response.data;
