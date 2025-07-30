@@ -209,7 +209,7 @@ def get_llm_service(
         **kwargs
     ) 
 
-if __name__ == "__main__":
-    llm = LLMService()
-    answer = asyncio.run(llm.generate("你好"))
-    print(answer)
+# if __name__ == "__main__":
+#     llm = LLMService()
+#     answer = asyncio.run(llm.generate("你好"))
+#     print(answer)

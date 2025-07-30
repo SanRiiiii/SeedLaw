@@ -80,23 +80,22 @@ class BAAIReranker:
                 max_length=512
             )
             
-            # 将输入移动到相应设备
             if torch.cuda.is_available():
                 inputs = {k: v.to("cuda") for k, v in inputs.items()}
                 
             outputs = self.model(**inputs)
             scores = outputs.logits.squeeze(-1).cpu().tolist()
             
-        # 将分数与文档关联并排序
         scored_docs = [(doc, score) for doc, score in zip(documents, scores)]
         scored_docs.sort(key=lambda x: x[1], reverse=True)
         
         # 取top_k结果
         reranked_results = []
         for doc, score in scored_docs[:top_k]:
-            result = doc.copy()
+            result = {}
+            result['doc'] = doc.copy()
             result["reranker_score"] = score
             reranked_results.append(result)
             
-        return reranked_results
+        return [result['doc'] for result in reranked_results]
 

@@ -48,7 +48,7 @@ def select_chunks(chunks, num_chunks=10):
 def build_enterprise_dataset():
     """构建企业运营相关的数据集"""
     
-    # 定义30个与企业运营最相关的法律文件
+    # 定义20个与企业运营最相关的法律文件
     enterprise_law_files = [
         "公司法(2023-12-29)_chunks.json",
         "企业破产法(2006-08-27)_chunks.json", 
@@ -92,7 +92,7 @@ def build_enterprise_dataset():
             
             if chunks:
                 # 选择10个chunk
-                selected = select_chunks(chunks, 10)
+                selected = select_chunks(chunks, 15)
                 
                 # 添加来源信息
                 for chunk in selected:
@@ -115,7 +115,7 @@ def build_enterprise_dataset():
     }
     
     # 保存到新的json文件
-    srcdata_output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/enterprise_operation_dataset.json"
+    srcdata_output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/enterprise_operation_dataset_finetune.json"
     if not os.path.exists(os.path.dirname(srcdata_output_path)):
         os.makedirs(os.path.dirname(srcdata_output_path))
     with open(srcdata_output_path, 'w', encoding='utf-8') as f:
@@ -224,7 +224,7 @@ def process_chunk(chunk):
     return result
 
 def make_qa_multiple(chunk):
-    
+    pass
 
 def build_qa_dataset(dataset_path, output_path):
 
@@ -328,14 +328,14 @@ def build_qa_dataset(dataset_path, output_path):
 
 if __name__ == "__main__":
     # 设置随机种子以确保可重现性
-    random.seed(42)
+    random.seed(37)
     
     # 构建数据集
     # dataset = build_enterprise_dataset()
     
     # 构建QA数据集
-    dataset_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/enterprise_operation_dataset.json"
-    qa_output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/qa_dataset.jsonl"
+    dataset_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/enterprise_operation_dataset_finetune.json"
+    qa_output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/qa_dataset_finetune.jsonl"
     
     print("\n开始构建QA数据集...")
     qa_dataset = build_qa_dataset(dataset_path, qa_output_path) 

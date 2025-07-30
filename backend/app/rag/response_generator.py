@@ -61,18 +61,13 @@ class Generator:
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(query, retrieved_docs)
 
-        # 构建消息历史
         messages = [{"role": "system", "content": system_prompt}]
 
-
-        # 添加当前问题
         messages.append({"role": "user", "content": user_prompt})
 
         try:
-            # 使用LLM服务获取回答
             response_data = await self.llm_service.chat_completion(messages, **kwargs)
             
-            # 检查是否有错误
             if "error" in response_data:
                 logger.error(f"生成回答时发生错误: {response_data['error']}")
                 return {
@@ -81,21 +76,20 @@ class Generator:
                     "error": response_data["error"]
                 }
             
-            # 解析回答
             answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
             return {
                 "answer": answer,
                 "retrieved_docs": [
                     {
-                        "source": doc.get('source', ''),
-                        "title": doc.get('title', ''),
-                        "article_number": doc.get('article_number', ''),
-                        "text": doc.get('text', ''),
-                        "score": doc.get('score', 0.0)
+                        "document_name": doc.get('document_name', ''),
+                        "chapter": doc.get('chapter', ''),
+                        "section": doc.get('section', ''),
+                        "content": doc.get('content', ''),
+                        "effective_status": doc.get('effective_status', ''),
+                        "effective_date": doc.get('effective_date', '')
                     } for doc in retrieved_docs
-                ],
-                "sources": self._extract_sources_from_answer(answer, retrieved_docs)
+                ]
             }
 
         except Exception as e:
@@ -110,25 +104,28 @@ class Generator:
 
     def _build_system_prompt(self) -> str:
         """构建系统提示"""
-        return """你是一个专业的法律顾问，专注于为中国科技创业者提供准确的法律信息和建议。
-你的回答需要：
-1. 基于提供的法律信息给出具体、实用的建议，不要偏离给出的法律依据！！
-2. 清晰标明引用的法律依据，使用[n]格式引用相关法条或规定，如[1]、[2]等。
-3. 如果提供的信息不足以完全回答问题，请诚实说明并提供基于已知信息的最佳建议。
-4. 解释法律风险并提供可能的解决方案。
-5. 避免给出过于绝对的法律判断，而是强调法律适用的可能性。
-6. 提醒用户在处理重要法律事务时咨询专业律师。
+        return """
+## 背景 ##
+你是一个专业的法律顾问，专注于为中国科技创业者提供准确的法律信息和建议。
+## 任务 ##
+你将收到一个用户的问题，以及检索到的相关法律依据。你需要根据用户的问题和检索到的法律依据，给出具体的法律建议。
 
+## 要求 ##
+1. 如果收到的法律依据为空，请返回，抱歉我没有找到相关的法律依据，请您咨询专业律师。
+2.基于提供的法律信息给出具体、实用的建议，不要偏离给出的法律依据！！
+3. 清晰标明引用的法律依据，使用[n]格式引用相关法条或规定，如[1]、[2]等。
+4. 如果提供的信息不足以完全回答问题，请诚实说明并提供基于已知信息的最佳建议。
+5. 建议用户在处理重要法律事务时咨询专业律师。
+
+## 注意 ##
 在回答中，必须遵循以下格式：
 1. 用plain text格式回答,不要使用markdown格式,不要使用markdown格式,不要使用markdown格式
-2. 根据法律依据详细解答问题
-3. 在回答相关部分引用具体法条[n]
-4. 在回答最后，添加"【法律依据】"部分，完整列出所有引用的法律条文，格式如：
+2. 在回答相关部分引用具体法条[n]
+3. 在回答最后，添加"【法律依据】"部分，完整列出所有引用的法律条文，格式如：
    【法律依据】
    [1] 《中华人民共和国公司法》第二条：有限责任公司是指...
    [2] 《中华人民共和国民法典》第六十条：...
-5. 如果有实用的建议或风险提示，请在法律依据之前给出
-
+4. 如果有实用的建议或风险提示，请在法律依据之前给出
 请确保你引用的每个法条编号[n]都准确对应提供给你的法律依据列表中的编号。不要自行编造法条内容，只能引用我提供给你的法律依据。"""
 
     def _build_user_prompt(self, query: str, retrieved_docs: List[Dict[str, Any]]) -> str:
@@ -141,18 +138,14 @@ class Generator:
             source_parts = []
             if doc.get('document_name'):
                 source_parts.append(doc.get('document_name'))
-            elif doc.get('source'):
-                source_parts.append(doc.get('source'))
                 
             if doc.get('chapter'):
                 source_parts.append(doc.get('chapter'))
-            elif doc.get('title'):
-                source_parts.append(doc.get('title'))
+    
                 
             if doc.get('section'):
                 source_parts.append(doc.get('section'))
-            elif doc.get('article_number'):
-                source_parts.append(doc.get('article_number'))
+        
             
             is_effective = doc.get('is_effective', True)
             effective_status = "（现行有效）" if is_effective else "（已失效）"
@@ -166,30 +159,31 @@ class Generator:
         prompt += "请根据以上法律依据回答我的问题，必须在回答中准确引用相关的法条编号[n]，并在回答最后列出所有引用的法条原文。"
         return prompt
 
-    def _extract_sources_from_answer(self, answer: str, retrieved_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """从回答中提取引用的法律依据"""
-        # 提取所有引用标记 [n]
-        citation_pattern = r'\[(\d+)\]'
-        citations = set(re.findall(citation_pattern, answer))
+    # def _extract_sources_from_answer(self, answer: str, retrieved_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """从回答中提取引用的法律依据"""
+    #     # 提取所有引用标记 [n]
+    #     citation_pattern = r'\[(\d+)\]'
+    #     citations = set(re.findall(citation_pattern, answer))
 
-        # 收集引用的文档
-        sources = []
-        for citation in citations:
-            try:
-                idx = int(citation) - 1
-                if 0 <= idx < len(retrieved_docs):
-                    source = {
-                        "source": retrieved_docs[idx].get('source', '') or retrieved_docs[idx].get('document_name', ''),
-                        "title": retrieved_docs[idx].get('title', '') or retrieved_docs[idx].get('chapter', ''),
-                        "article_number": retrieved_docs[idx].get('article_number', '') or retrieved_docs[idx].get('section', ''),
-                        "text": retrieved_docs[idx].get('text', '') or retrieved_docs[idx].get('content', ''),
-                        "citation_number": citation
-                    }
-                    sources.append(source)
-            except (ValueError, IndexError):
-                logger.warning(f"无效的引用编号: {citation}")
+    #     # 收集引用的文档
+    #     sources = []
+    #     for citation in citations:
+    #         try:
+    #             idx = int(citation) - 1
+    #             if 0 <= idx < len(retrieved_docs):
+    #                 source = {
+    #                     "document_name": retrieved_docs[idx].get('document_name', ''),
+    #                     "chapter": retrieved_docs[idx].get('chapter', ''),
+    #                     "section": retrieved_docs[idx].get('section', ''),
+    #                     "content": retrieved_docs[idx].get('content', ''),
+    #                     "effective_status": retrieved_docs[idx].get('effective_status', ''),
+    #                     "effective_date": retrieved_docs[idx].get('effective_date', ''),
+    #                 }
+    #                 sources.append(source)
+    #         except (ValueError, IndexError):
+    #             logger.warning(f"无效的引用编号: {citation}")
 
-        return sources
+    #     return sources
 
 
 

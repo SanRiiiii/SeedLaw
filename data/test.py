@@ -273,12 +273,14 @@ def main():
     
     # 配置参数
     DATASET_PATH = "qa_dataset.jsonl"  # 测试数据集路径
-    OUTPUT_PATH = "rag_evaluation_results.json"  # 结果输出路径
-    TOP_K_LIST = [5, 10, 20]  # 要测试的top-k值
+    OUTPUT_PATH = "rag_finetune_evaluation_results_finetune_hybrid.json"  # 结果输出路径
+
+    # TOP_K_LIST = [5, 10, 20]  # 要测试的top-k值
+    TOP_K_LIST = [1,3,5,10,20]
     
     # 检索配置 - 可以根据需要调整
     USE_DENSE = True    # 是否使用向量检索
-    USE_SPARSE = True   # 是否使用关键词检索  
+    USE_SPARSE = True  # 是否使用关键词检索  
     USE_RERANK = True   # 是否使用重排序
     
     try:

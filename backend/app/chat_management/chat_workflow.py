@@ -110,7 +110,7 @@ async def generate_response_rag_context(state: OverallState) -> OverallState:
 async def generate_response_rag_contextfree(state: OverallState) -> OverallState:
     """使用RAG生成响应（无上下文）"""
     print('开始RAG生成响应')
-    user_input = format_messages_for_llm(state["messages"][-1].content)
+    user_input = format_messages_for_llm(state["user_input"])
     response = await rag_chain.rag_chain(user_input)
     answer = response.get("answer", "")
     sources = response.get("sources", [])
@@ -141,7 +141,7 @@ async def generate_response_llm_context(state: OverallState) -> OverallState:
 async def generate_response_llm_contextfree(state: OverallState) -> OverallState:
     """使用LLM生成响应（无上下文）"""
     print('开始LLM生成响应')
-    user_input = format_messages_for_llm(state["messages"][-1].content)
+    user_input = format_messages_for_llm(state["user_input"])
     response = await llm_service.generate(llm_response_prompt(user_input))
     print(f'LLM生成响应结果：{response}')
     return {
@@ -150,6 +150,7 @@ async def generate_response_llm_contextfree(state: OverallState) -> OverallState
         "answer": response,
         "sources": []
     }
+
 
 
 builder = StateGraph(OverallState)

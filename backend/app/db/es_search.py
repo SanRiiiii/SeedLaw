@@ -20,6 +20,9 @@ elasticSearch 关键词搜索器 版本为ES8.x
 
 
 '''
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from typing import List, Dict, Any, Optional
 import logging
 import time
@@ -306,3 +309,8 @@ class ESSearcher:
         except Exception as e:
             self.logger.error(f"Elasticsearch搜索失败: {e}")
             return [] 
+            
+
+# if __name__ == "__main__" :
+#     searcher = ESSearcher()
+#     print(searcher.search("公司注册需要资料"))

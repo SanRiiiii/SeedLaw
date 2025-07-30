@@ -5,13 +5,13 @@
 '''
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import torch
 from transformers import AutoTokenizer, AutoModel
 import numpy as np
 from tqdm import tqdm
 import logging
-from app.core.config import Settings
+from core.config import Settings
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -22,6 +22,7 @@ class BGEEmbedding:
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_path = settings.EMBEDDING_MODEL_PATH
+        print(self.model_path)
         try:
     
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, local_files_only=True)
@@ -82,9 +83,16 @@ class BGEEmbedding:
                 embeddings.append(batch_embeddings.cpu().numpy())
         
         result = np.vstack(embeddings)
-        
+        print(result)
+
         # 如果输入是单个字符串，返回单个向量
         if single_input:
             return result[0]
+        
+     
             
         return result
+    
+if __name__ == "__main__":
+    embedding = BGEEmbedding()
+    embedding.encode("你好")

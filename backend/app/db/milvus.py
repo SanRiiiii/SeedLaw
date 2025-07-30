@@ -1,10 +1,11 @@
 import os
 import sys
+import json
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
 from typing import List, Dict, Any, Optional
 import logging
-from app.core.config import Settings
+from core.config import Settings
 
 settings = Settings()
 logger = logging.getLogger(__name__)
@@ -188,9 +189,8 @@ class VectorStore:
                         'uuid': hit.id,
                         'score': hit.score,
                     }
-                    # 添加其他字段
                     for field in output_fields:
-                        if field != "id":  # id已经作为uuid添加
+                        if field != "id":
                             result[field] = hit.entity.get(field)
                     
                     search_results.append(result)
@@ -199,4 +199,22 @@ class VectorStore:
         except Exception as e:
             logger.error(f"搜索失败: {e}")
             return []
-    
+        
+
+if __name__ == "__main__":
+    vector_store = VectorStore()
+    collection = Collection("legal_documents")
+    schema = collection.schema
+    def convert_datatype_to_string(obj):
+        if hasattr(obj, 'name'):
+            return obj.name
+        return str(obj)
+
+    # 使用自定义序列化
+    formatted_json = json.dumps(
+        schema, 
+        indent=2, 
+        ensure_ascii=False, 
+        default=convert_datatype_to_string
+    )
+    print(formatted_json)
