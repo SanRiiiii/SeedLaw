@@ -51,7 +51,7 @@ def save_data(data,output_path):
 
 # 读取数据集
 if __name__ == "__main__":
-   dataset_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/qa_dataset_finetune.jsonl"
+   dataset_path = ""
    data = build_finetune_data(dataset_path,16,32)
-   output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/qa_dataset_finetune_emb.jsonl"
+   output_path = ""
    save_data(data,output_path)

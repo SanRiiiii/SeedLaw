@@ -334,8 +334,8 @@ if __name__ == "__main__":
     # dataset = build_enterprise_dataset()
     
     # 构建QA数据集
-    dataset_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/enterprise_operation_dataset_finetune.json"
-    qa_output_path = "/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/qa_dataset_finetune.jsonl"
+    dataset_path = ""
+    qa_output_path = ""
     
     print("\n开始构建QA数据集...")
     qa_dataset = build_qa_dataset(dataset_path, qa_output_path) 

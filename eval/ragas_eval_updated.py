@@ -40,7 +40,7 @@ def run_evaluation():
     llm = get_ragas_llm()
     
     # 从已保存的JSON文件读取数据集
-    EVALUATION_DATASET_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/eval/evaluation_dataset_v2.json'
+    EVALUATION_DATASET_PATH = ''
     with open(EVALUATION_DATASET_PATH, 'r', encoding='utf-8') as f:
         dataset = json.load(f)
     
@@ -55,7 +55,7 @@ def run_evaluation():
         print(f"评估完成，结果: {result}")
         
         # 保存评估结果
-        EVALUATION_RESULTS_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/eval/evaluation_results.json'
+        EVALUATION_RESULTS_PATH = ''
         with open(EVALUATION_RESULTS_PATH, 'w', encoding='utf-8') as f:
             result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
             json.dump(result_dict, f, ensure_ascii=False, indent=4)

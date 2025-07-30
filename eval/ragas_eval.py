@@ -29,8 +29,8 @@ llm = LangchainLLMWrapper(ChatOpenAI(
 if __name__ == "__main__":
 
     dataset = []
-    DATASET_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/data/multi_qa_dataset.json'
-    EVALUATION_DATASET_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/eval/evaluation_dataset_v2.json'
+    DATASET_PATH = ''
+    EVALUATION_DATASET_PATH = ''
 
     # 读取整个JSON文件
     with open(DATASET_PATH, 'r', encoding='utf-8') as f:
@@ -61,7 +61,7 @@ if __name__ == "__main__":
          json.dump(dataset, f, ensure_ascii=False, indent=4)
      
     #  # 从已保存的JSON文件读取数据集
-    # EVALUATION_DATASET_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/eval/evaluation_dataset.json'
+    # EVALUATION_DATASET_PATH = ''
     # with open(EVALUATION_DATASET_PATH, 'r', encoding='utf-8') as f:
     #      dataset = json.load(f)
     
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # print(result)
     
     # # 保存评估结果
-    # EVALUATION_RESULTS_PATH = '/Users/jing/Desktop/coding.../毕设/code_pycharm/pythonProject/legal-assistant/eval/evaluation_results.json'
+    # EVALUATION_RESULTS_PATH = ''
     # with open(EVALUATION_RESULTS_PATH, 'w', encoding='utf-8') as f:
     #     # 将评估结果转换为可序列化的字典
     #     result_dict = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
