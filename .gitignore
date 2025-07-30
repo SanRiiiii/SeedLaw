@@ -1,1 +1,4 @@
-*.json
+scripts/*.json
+data/*.json
+eval/*.json
+
