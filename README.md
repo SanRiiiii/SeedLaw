@@ -31,7 +31,7 @@
 
 ### 后端技术栈
 - **Web 框架**：FastAPI + Python 3.8+
-- **数据库**：MySQL + Redis + Milvus + Elasticsearch
+- **数据库**：MySQL + Milvus + Elasticsearch
 - **AI 模型**：
   - 大语言模型：火山引擎 API、SiliconFlow API
   - 嵌入模型：BGE-large-zh-v1.5
@@ -44,7 +44,7 @@
 
 ### 前端技术栈
 - **框架**：Vue 3 + TypeScript
-- **UI 组件**：Ant Design Vue + Element Plus
+- **UI 组件**：Ant Design Vue 
 - **样式**：Tailwind CSS
 - **状态管理**：Pinia
 - **构建工具**：Vite
